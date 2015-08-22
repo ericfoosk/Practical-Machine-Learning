@@ -1,0 +1,162 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Eric Foo"
+date: "Saturday, August 22, 2015"
+output: html_document
+---
+
+#Synopsis
+
+##Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+##Data 
+
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.  
+
+
+#Data Processing
+
+##Loading required libraries
+
+```{r, echo = FALSE, results = 'hide', message = FALSE, warning = FALSE, tidy = TRUE}
+library(caret)
+library(randomForest)
+library(e1071)
+```
+
+##Downloading data
+
+Training and Testing dataset is downloaded from online source.
+
+```{r, echo = TRUE}
+#Downloading the training data set
+urlLink1 <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+if(!file.exists("pml-training.csv")) {
+  download.file(urlLink1, destfile = "pml-training.csv")
+  cat("Training data successfully downloaded.")
+} else {
+  cat("Training data already downloaded.")
+}
+
+#Downloading the testing data set
+urlLink2 <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+if(!file.exists("pml-testing.csv")) {
+  download.file(urlLink1, destfile = "pml-testing.csv")
+  cat("Testing data successfully downloaded & extracted.")
+} else {
+  cat("Testing data already downloaded.")
+}
+```
+
+##Loading both the Training and Testing datasets
+
+```{r, echo = TRUE}
+#Loading Training dataset
+trainData <- read.csv("pml-training.csv", header = TRUE, na.strings = c("NA", "#DIV/0!", ""))
+
+#Loading Testing dataset
+testData <- read.csv("pml-testing.csv", header = TRUE, na.strings = c("NA", "#DIV/0!", ""))
+```
+
+##Cleaning the data
+Some columns containing invalid values such as NA’s and blanks were dropped.
+
+```{r, echo = TRUE}
+#Remove columns with all missing values
+trainData <- trainData[, colSums(is.na(trainData)) == 0]
+testData <- testData[, colSums(is.na(testData)) == 0]
+```
+
+Some irrelevant columns this project were dropped.
+
+The following fields removed included:
+
+* the unlabled row index
+
+* `user_name`
+
+* `raw_timestamp_part_1`
+
+* `raw_timestamp_part_2`
+
+* `cvtd_timestamp`
+
+* `new_window`
+
+* `num_window`
+
+
+```{r, echo = TRUE}
+# Delete columns with irrelevant values
+trainData <- trainData[, -c(1:7)]
+testData <- testData[, -c(1:7)]
+
+# Describe Training and Testing dataset
+dim(trainData)
+dim(testData)
+```
+
+The `trainData` set contains 53 variables and 19622 observations, while the `testData` set contains 53 variables and 20 observations.
+
+#Cross validation 
+
+Cross validation was achieved by splitting the Training dataset.
+
+The Training dataset was partionned into 2 sets: `subTrainData` (75%) and `subTestData` (25%), using random subsampling without replacement.
+
+```{r, echo = TRUE}
+subSampleData <- createDataPartition(y = trainData$classe, p = 0.75, list = FALSE)
+
+subTrainData <- trainData[subSampleData, ] 
+subTestData <- trainData[-subSampleData, ]
+
+# Describe cross validation dataset
+dim(subTrainData)
+dim(subTestData)
+```
+
+The `subTrainData` set contains 53 variables and 14718 observations, while the `subTestData` set contains 53 variables and 4904 observations.
+
+#Prediction Model
+
+The Random Forest algorithm was used to perform the prediction.
+
+```{r, echo = TRUE}
+modelRF <- randomForest(classe ~. , data = subTestData, method = "class")
+
+predictRF <- predict(modelRF, subTestData, type = "class")
+
+# Test results on subTesting data set:
+confusionMatrix(predictRF, subTestData$classe)
+```
+
+Accuracy for Random Forest model was 0.9965 (95% CI: (0.9945, 0.998)) with the expected out-of-sample error is estimated at 0.0035, or 0.35%. 
+
+The expected out-of-sample error is calculated as 1 - accuracy for predictions made against the cross-validation set.  With an accuracy above 99% on the cross-validation data, missclassifying a very small number of the test samples is expected.
+
+#Prediction for Testing Dataset
+The model is applied to the downloaed Testing dataset. "problem_id_x.txt"  files are generated for the assignments.
+```{r, echo = TRUE}
+# Predict outcome levels on the downloaded Testing dataset using Random Forest Algorithm
+predictResults <- predict(modelRF, testData, type = "class")
+
+# Write files for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_", i, ".txt")
+    write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, col.names = FALSE)
+  }
+}
+
+pml_write_files(predictResults)
+```
